@@ -1,578 +1,804 @@
 # Matibabu
 
-**Matibabu** is an offline-first Electronic Medical Records (EMR) platform designed for clinical environments where reliable connectivity cannot be assumed.
+**Matibabu** is an offline-first Electronic Medical Records (EMR) platform designed for healthcare facilities operating in environments where network connectivity cannot be assumed.
 
-The system is being built around a local-first clinical workflow: clinical data can be captured and persisted locally, while synchronization with remote infrastructure is treated as a separate concern.
-
-The backend is implemented with **Java and Spring Boot**, with a domain-oriented architecture separating clinical rules from application orchestration, persistence, and external integrations.
-
-> **Project status:** Active development
+The system is being developed around a local-first clinical workflow: clinical data is persisted locally, clinical operations remain independent of continuous connectivity, and synchronization with a central system is being introduced as a separate architectural concern.
 
 ---
 
-## Overview
+## Current Status
 
-Clinical environments do not always have reliable network connectivity. An EMR that depends on continuous access to a remote server can therefore become a constraint on clinical workflows.
+Matibabu is under active development.
 
-Matibabu takes an **offline-first** approach.
+The current backend includes working clinical and facility functionality, local persistence, authentication, database migrations, automated testing, and the initial architectural foundation for offline synchronization.
 
-The local application is able to work against a local database while the backend maintains a clear boundary between:
+Current development is moving toward:
 
-* clinical domain logic
-* application use cases
-* persistence
-* authentication and security
-* synchronization
-* external health-information systems
-
-The long-term architecture is intended to support synchronization from local data to remote infrastructure and, eventually, interoperability with **DHIS2**.
+* Facility departmentalization
+* Facility and department-level reporting
+* Continued synchronization implementation
+* Remote data exchange
+* DHIS2 interoperability
 
 ---
 
 ## Current Capabilities
 
-The backend currently provides clinical workflows around:
+The backend currently contains functionality for:
 
-### Patients
+* Patient management
+* Clinical encounters
+* Medical records
+* Clinical observations
+* Diagnoses
+* Vitals
+* Treatments
+* Medicines
+* ATC mapping and review
+* Referrals
+* Facility management
+* Clinician authentication
+* Role-based security
+* CSRF protection
+* Local SQLite persistence
+* Flyway database migrations
+* Repository adapters
+* Automated tests
+* Initial offline synchronization architecture
+
+---
+
+# Architecture
+
+The backend follows a domain-oriented architecture that separates business rules, application orchestration, infrastructure, and security concerns.
+
+```text
+                         API
+                          │
+                          ▼
+                  Application Layer
+                  Use Cases / Services
+                          │
+                          ▼
+                     Domain Layer
+               Business Rules / Interfaces
+                          ▲
+                          │
+                          │ implementations
+                          │
+                 Infrastructure Layer
+              Persistence / External Systems
+                          │
+                          ▼
+                       SQLite
+```
+
+The architectural goal is to keep clinical business rules independent of persistence technology, framework concerns, and external health-information systems.
+
+---
+
+# Repository Structure
+
+```text
+matibabu/
+├── backend/
+├── frontend/
+├── database/
+├── docs/
+├── requests.http
+└── README.md
+```
+
+The backend is currently the primary implementation area.
+
+```text
+backend/src/main/java/com/matibabu/backend/
+
+├── api/
+├── application/
+├── domain/
+├── infrastructure/
+├── security/
+├── config/
+└── exception/
+```
+
+Domain capabilities are organized around clinical and operational concepts rather than being implemented as one large collection of framework-specific classes.
+
+---
+
+# Clinical Domains
+
+## Patients
+
+The patient domain currently supports:
 
 * Patient registration
 * Patient retrieval
 * Patient listing
 * Patient updates
-* Patient search
-* Validation of patient data
-* Duplicate phone-number handling
-* Stable UUID-based patient identity
+* Patient deletion
+* Phone-number search
+* Validation
+* Duplicate phone-number detection
+* UUID-based patient identity
+* Identity-document information
+* Facility association
 
-### Encounters
+Patient behaviour is represented in the domain model, while persistence is handled through repository interfaces and infrastructure adapters.
 
-* Starting clinical encounters
+Patient identity and timestamps are also part of the current synchronization design.
+
+---
+
+## Encounters
+
+Encounters represent clinical interactions involving a patient.
+
+The current implementation supports:
+
+* Starting encounters
 * Recording the attending clinician
-* Encounter lifecycle management
+* Encounter status
 * Discharging encounters
 * Cancelling encounters
-* Encounter persistence
-* Encounter status validation
+* Retrieving encounters
+* Persistence through repository adapters
 
-### Medical Records
+Encounter lifecycle rules are handled by the domain model.
 
-The medical-record domain supports clinical information associated with patient care, including clinical observations and diagnoses.
+The attending clinician is recorded explicitly on the encounter rather than inferred from the persistence layer.
 
-The medical-record model is designed so that clinical information remains part of the domain rather than being coupled directly to persistence concerns.
+---
 
-### Referrals
+## Medical Records
 
-Referrals are modeled as an independent domain concept with their own lifecycle.
+The medical-record domain currently supports:
 
-A referral can record:
+* Creating medical records
+* Retrieving medical records
+* Listing a patient's medical records
+* Clinical observations
+* Diagnoses
+* Vitals
+* Treatments
 
-* originating encounter
-* patient
-* referring clinician
-* optional diagnosis
-* reason for referral
-* urgency
-* receiving facility
-* optional department
-* referral status
-* resolution information
+Medical records are associated with clinical encounters and patients.
 
-The current referral lifecycle is:
+The persistence implementation separates the medical-record aggregate from its database representation.
+
+Treatment persistence is currently handled as part of the medical-record persistence boundary, with treatments re-synchronized in full when the medical record is saved.
+
+---
+
+## Medicines
+
+Matibabu contains a medicine domain and supporting persistence functionality.
+
+Current functionality includes:
+
+* Medicine retrieval
+* Medicine listing
+* ATC classification metadata
+* Identification of unresolved ATC mappings
+* ATC mapping review
+* ATC mapping resolution
+* Mapping audit metadata
+
+The medicine catalogue is kept separate from patient clinical records.
+
+---
+
+## Referrals
+
+Referrals are represented as an independent domain concept with an explicit lifecycle.
+
+The current implementation includes:
+
+* Referral creation
+* Referral retrieval
+* Referral cancellation
+* Referral completion
+* Referral status
+* Referral urgency
+* Referring clinician
+* Originating encounter
+* Patient
+* Diagnosis information
+* Referral reason
+* Receiving facility
+* Receiving department information
+
+Referral lifecycle transitions are handled through application services and domain rules.
+
+---
+
+# Facilities
+
+Facility management is already implemented.
+
+The current backend contains:
 
 ```text
-PENDING
-   ├── COMPLETED
-   └── CANCELLED
+api/facility/
+application/facility/
+domain/facility/
+infrastructure/persistence/facility/
 ```
 
-The receiving facility is currently represented as free text. A first-class facility model can be introduced later without coupling the referral domain to an under-specified facility concept.
+The facility domain includes:
 
----
+* Facility creation
+* Facility listing
+* Facility deactivation
+* Facility type
+* MFL code
+* Facility identity
+* Facility association with clinical data
 
-## Architecture
-
-Matibabu follows a domain-oriented architecture influenced by **Domain-Driven Design and Clean Architecture**.
-
-The primary goal is to keep clinical rules independent from frameworks and infrastructure.
-
-A simplified dependency direction is:
+The persistence boundary includes:
 
 ```text
-                    API
-                     │
-                     ▼
-              Application Layer
-                     │
-                     ▼
-               Domain Layer
-                 ▲       │
-                 │       ▼
-        Infrastructure / Persistence
-                 │
-                 ▼
-               SQLite
+Facility
+FacilityRepository
+FacilityEntity
+FacilityMapper
+FacilityRepositoryAdapter
+SpringDataFacilitiesRepository
 ```
 
-The important boundary is that the domain does not depend on the persistence implementation.
-
-For example:
+Facility-related schema evolution is represented in the Flyway migration history, including:
 
 ```text
-Application Service
-       │
-       ▼
-Domain Repository Interface
-       │
-       ▲
-       │
-Persistence Adapter
-       │
-       ▼
-Spring Data / JDBC
-       │
-       ▼
-SQLite
+V19__create_facilities_table.sql
+V20__restructure_referrals_table.sql
+V21__add_facility_id_and_identity_documents.sql
 ```
 
-This allows the application and domain logic to remain independent of whether data is stored locally, remotely, or eventually synchronized with another system.
+Facility structure is the foundation for the next organizational modelling step: **departmentalization for reporting**.
 
 ---
 
-## Project Structure
+# Security
 
-The backend is organized around domain capabilities rather than a single global technical-layer structure.
+Authentication and authorization are implemented using Spring Security.
 
-A simplified representation is:
+The security boundary currently includes:
 
 ```text
-src/
-└── main/
-    ├── java/com/matibabu/backend/
-    │
-    ├── domain/
-    │   ├── patient/
-    │   ├── encounter/
-    │   ├── medicalrecord/
-    │   └── referral/
-    │
-    ├── application/
-    │   ├── patient/
-    │   ├── encounter/
-    │   ├── medicalrecord/
-    │   └── referral/
-    │
-    ├── infrastructure/
-    │   └── persistence/
-    │       ├── patient/
-    │       ├── encounter/
-    │       ├── medicalrecord/
-    │       └── referral/
-    │
-    └── api/
-        └── ...
+security/
+├── controllers/
+│   ├── AdminController
+│   ├── AuthController
+│   ├── CsrfController
+│   └── DemoController
+│
+├── CustomUserDetails.java
+├── CustomUserDetailsService.java
+├── SecurityConfig.java
+│
+├── entity/
+│   ├── Clinician.java
+│   └── Role.java
+│
+├── repository/
+│   └── ClinicianRepository.java
+│
+└── services/
+    ├── ClinicianService.java
+    └── ClinicianServiceImpl.java
 ```
 
-The exact package structure may evolve as the system grows, but the architectural boundary remains important:
+Security is kept outside the clinical domain.
 
-> **Domain rules should not depend on infrastructure details.**
-
----
-
-## Domain Layer
-
-The domain layer contains the clinical concepts and rules that define Matibabu's behaviour.
-
-Examples include:
-
-* `Patient`
-* `Encounter`
-* `Referral`
-* `ReferralStatus`
-* `ReferralUrgency`
-* domain-specific exceptions
-* repository interfaces used as persistence ports
-
-Domain objects are responsible for protecting their own invariants.
-
-For example, an encounter controls its valid lifecycle transitions rather than allowing controllers or database adapters to arbitrarily modify its state.
-
-Similarly, a referral cannot be completed or cancelled once it has already left the `PENDING` state.
+CSRF protection is explicitly configured as part of the web security boundary.
 
 ---
 
-## Application Layer
+# Offline-First Architecture
 
-The application layer coordinates use cases.
+Offline-first operation is a core architectural requirement.
 
-Application services are responsible for:
+The system assumes that a facility may need to continue clinical operations when a central service or network connection is unavailable.
 
-* receiving application requests
-* invoking domain behaviour
-* coordinating repositories
-* controlling transaction boundaries where required
-* returning application-level results
-
-The application layer does not contain persistence implementation details.
-
-This keeps use cases testable without requiring the full Spring application context.
-
----
-
-## Persistence
-
-The current local persistence implementation uses **SQLite**.
+The local system therefore acts as the operational source for clinical activity:
 
 ```text
-Application
-     │
-     ▼
-Domain Repository Port
-     │
-     ▼
-Persistence Adapter
-     │
-     ▼
-SQLite
+┌───────────────────┐
+│   Clinical Client │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│ Local Application │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│      SQLite       │
+└─────────┬─────────┘
+          │
+          │ synchronization
+          ▼
+┌───────────────────┐
+│  Central / Remote │
+│      System       │
+└─────────┬─────────┘
+          │
+          ▼
+┌───────────────────┐
+│      DHIS2        │
+└───────────────────┘
 ```
 
-Database schema changes are managed through **Flyway migrations**.
-
-Hibernate/JPA is configured to validate the existing schema rather than silently creating or modifying the database structure.
-
-This makes schema evolution explicit and version-controlled.
-
----
-
-## Database
-
-The local development database is SQLite:
+The local database is currently SQLite:
 
 ```text
 jdbc:sqlite:./matibabu-local.db
 ```
 
-The backend uses:
+This allows the clinical application to operate locally without requiring a continuously available remote database.
 
-* SQLite JDBC
+---
+
+# Initial Synchronization Strategy
+
+The synchronization architecture has already started to take shape.
+
+The backend contains a dedicated `NodeIdentity` configuration component, and the synchronization design is documented through:
+
+```text
+docs/decisions/ADR-08-synchronization.md
+```
+
+The patient API and domain model also explicitly account for requirements established by the synchronization design.
+
+This establishes an important concept for an offline-first system:
+
+> A local installation is an identifiable node rather than an anonymous database replica.
+
+Conceptually:
+
+```text
+                 Matibabu
+                    │
+             ┌──────┴──────┐
+             │             │
+          Node A         Node B
+             │             │
+          SQLite         SQLite
+             │             │
+             └──────┬──────┘
+                    │
+                    ▼
+             Central System
+```
+
+The synchronization strategy is intentionally being developed incrementally.
+
+### Currently established
+
+* Node identity
+* Synchronization-aware patient identity
+* Synchronization-aware patient timestamps
+* Synchronization architectural documentation
+* Persistence decisions that account for re-synchronization
+
+### Not yet implemented as a complete synchronization subsystem
+
+* General-purpose sync service
+* Outbox/change-log processing
+* Push/pull protocol
+* Sync checkpoints or cursors
+* Conflict-resolution engine
+* Retry/acknowledgement protocol
+* Complete remote synchronization workflow
+
+These remain part of the continuing synchronization work.
+
+---
+
+# Persistence
+
+The current local persistence implementation uses:
+
+* SQLite
+* Spring Data JPA
 * Hibernate
 * Hibernate Community Dialects
 * Flyway
-* schema validation
 
-Migrations are located under:
+The persistence architecture follows repository ports and infrastructure adapters.
 
 ```text
-src/main/resources/db/migration/
+Domain Repository
+       │
+       ▼
+Persistence Adapter
+       │
+       ▼
+Spring Data Repository
+       │
+       ▼
+Persistence Entity
+       │
+       ▼
+SQLite
 ```
 
-Database changes should be introduced through migrations rather than relying on automatic schema generation.
+MapStruct is used where domain and persistence representations require mapping.
+
+Persistence entities are not treated as the domain model.
 
 ---
 
-## Security
+# Database Migrations
 
-Authentication and application security are handled using **Spring Security**.
+Database schema evolution is managed through Flyway.
 
-Security concerns remain outside the clinical domain model.
+Migrations are stored under:
 
-The backend also considers CSRF/XSRF protection as part of the web security boundary rather than making security mechanisms part of the clinical domain.
+```text
+backend/src/main/resources/db/migration/
+```
 
-This keeps the domain focused on clinical behaviour while allowing the security implementation to evolve independently.
+The migration history covers the evolution of the system from the initial patient and encounter schema through:
 
----
+* Patient details
+* Medical records
+* Clinical data
+* Clinicians and sessions
+* Medicines
+* ATC metadata
+* Referrals
+* Facilities
+* Facility associations
+* Patient identity documents
 
-## Testing
+The current migration sequence reaches:
 
-Testing is treated as part of the architecture rather than only as endpoint verification.
+```text
+V21__add_facility_id_and_identity_documents.sql
+```
 
-The project contains tests at multiple levels:
-
-### Domain tests
-
-Verify clinical rules and invariants without starting Spring.
-
-### Application/service tests
-
-Verify use-case orchestration and repository interactions using lightweight in-memory implementations where appropriate.
-
-### Persistence tests
-
-Verify mappings and repository adapters against the actual persistence configuration.
-
-### Integration tests
-
-Verify API behaviour through the Spring application context, including:
-
-* HTTP responses
-* validation
-* persistence
-* error handling
-* domain/application integration
-
-The project intentionally avoids making Mockito a dependency of the application test strategy. Where possible, tests use real implementations, in-memory repository implementations, or the actual persistence layer.
+Database changes are therefore explicit, versioned, and source controlled.
 
 ---
 
-## Database Migrations
+# Application Layer
 
-Flyway migrations are versioned and committed with the source code.
-
-A migration should represent a deliberate schema change.
+Application behaviour is represented through use-case interfaces and service implementations.
 
 For example:
 
 ```text
-V18__create_referrals_table.sql
+StartEncounterUseCase
+        │
+        ▼
+StartEncounterService
+        │
+        ▼
+EncounterRepository
 ```
 
-introduced the referral persistence model.
+This pattern is used across the major application areas:
 
-When adding a new migration, ensure that the filename follows Flyway's naming convention:
+* Patients
+* Encounters
+* Facilities
+* Medical records
+* Medicines
+* Referrals
 
-```text
-V<version>__<description>.sql
-```
-
-The double underscore between the version and description is significant.
+The application layer coordinates workflows without becoming the owner of domain rules.
 
 ---
 
-## Running Locally
+# API
 
-### Requirements
+The backend exposes REST endpoints for the implemented clinical and operational capabilities.
 
-You will need:
+Current API areas include:
 
-* Java 25
-* Maven Wrapper
-* Git
-
-The project uses the Maven Wrapper, so a system-wide Maven installation is not required.
-
-Check Java:
-
-```bash
-java -version
+```text
+/api/patients
+/api/encounters
+/api/facilities
+/api/medical-records
+/api/medicines
+/api/referrals
 ```
 
-Clone the repository:
+Authentication, administration, and CSRF-related endpoints are handled separately by the security layer.
+
+API request and response models are kept separate from domain objects.
+
+---
+
+# Error Handling
+
+API exception handling is centralized through:
+
+```text
+api/exception/GlobalExceptionHandler
+```
+
+The application defines specific exceptions for cases including:
+
+* Patient not found
+* Encounter not found
+* Facility not found
+* Medical record not found
+* Medicine not found
+* Referral not found
+* Duplicate phone number
+* Duplicate MFL code
+* Invalid diagnosis reference
+* Invalid referral state
+* User not found
+* Existing clinician conflicts
+
+This keeps domain/application errors separate from HTTP response handling.
+
+---
+
+# Testing
+
+Testing is performed at multiple levels.
+
+### Domain tests
+
+Verify domain behaviour and business invariants independently of infrastructure.
+
+### Application tests
+
+Verify application services and use-case orchestration.
+
+These tests may use lightweight in-memory repository implementations where appropriate.
+
+### Persistence tests
+
+Verify:
+
+* Entity mappings
+* Repository adapters
+* Database persistence
+* Domain/persistence mapping
+
+### API and integration tests
+
+Verify behaviour across application boundaries, including:
+
+* HTTP requests
+* Validation
+* Persistence
+* Error handling
+* Security integration
+
+### Testing tools
+
+The project uses:
+
+* JUnit 5
+* Spring Boot testing support
+* Spring Data JPA testing support
+* Mockito where appropriate
+
+The testing strategy is deliberately mixed: some behaviour is tested with real implementations, some with lightweight in-memory implementations, and some dependencies are mocked when that provides an appropriate isolation boundary.
+
+---
+
+# Technology Stack
+
+| Area                | Technology                           |
+| ------------------- | ------------------------------------ |
+| Language            | Java 25                              |
+| Framework           | Spring Boot 4.1                      |
+| Web                 | Spring MVC                           |
+| Persistence         | Spring Data JPA                      |
+| ORM                 | Hibernate                            |
+| Local database      | SQLite                               |
+| Database migrations | Flyway                               |
+| SQLite support      | Hibernate Community Dialects         |
+| Mapping             | MapStruct                            |
+| Security            | Spring Security                      |
+| Testing             | JUnit 5 / Spring Boot Test / Mockito |
+| Build               | Maven Wrapper                        |
+| Identifiers         | UUID Creator                         |
+
+---
+
+# Development Workflow
+
+Matibabu generally follows this progression when introducing a capability:
+
+```text
+Requirement
+     │
+     ▼
+Domain Model / Invariants
+     │
+     ▼
+Application Use Case
+     │
+     ▼
+Repository Port
+     │
+     ▼
+Infrastructure Adapter
+     │
+     ▼
+Database Migration
+     │
+     ▼
+API
+     │
+     ▼
+Tests
+```
+
+Architecturally significant decisions are documented through ADRs.
+
+---
+
+# Architectural Principles
+
+## Domain independence
+
+Clinical rules should not depend directly on:
+
+* Spring
+* JPA
+* Hibernate
+* SQLite
+* Authentication infrastructure
+* DHIS2
+
+## Local-first operation
+
+Clinical workflows should remain usable without continuous network connectivity.
+
+## Explicit schema evolution
+
+Database changes are versioned through Flyway migrations.
+
+## Explicit boundaries
+
+Clinical domains, application orchestration, persistence, security, and synchronization should remain independently understandable.
+
+## External systems at the boundary
+
+Remote systems and DHIS2-specific concerns should be isolated from the core clinical domain wherever practical.
+
+## Incremental architecture
+
+Architectural concepts are introduced as requirements become concrete rather than building large abstractions before they are needed.
+
+---
+
+# Current Development Direction
+
+The current development path is:
+
+```text
+Clinical Workflows
+       │
+       ▼
+Facility Model
+       │
+       ▼
+Departmentalization
+       │
+       ▼
+Facility / Department Reporting
+       │
+       ▼
+Synchronization
+       │
+       ▼
+Remote Infrastructure
+       │
+       ▼
+DHIS2 Interoperability
+```
+
+### Current focus
+
+**Departmentalization of facilities for reporting.**
+
+The facility model already exists. The next modelling step is to determine how departments belong to facilities and how clinical activity should be attributed to those departments for reporting.
+
+The departmental model should be established before reporting queries and aggregation logic are implemented.
+
+---
+
+# Roadmap
+
+### Clinical
+
+* Continue expanding clinical workflows
+* Strengthen clinical validation and domain invariants
+
+### Facility Management
+
+* Departmentalize facilities
+* Establish department-level clinical attribution
+* Introduce facility and department reporting
+
+### Synchronization
+
+* Continue the initial synchronization implementation
+* Establish change tracking
+* Define synchronization protocol
+* Implement remote synchronization
+* Handle retries and failures
+* Define conflict-resolution behaviour
+
+### Interoperability
+
+* Establish reporting mappings
+* Integrate with DHIS2
+* Separate DHIS2-specific concepts from the clinical domain
+
+---
+
+# Development Setup
+
+## Requirements
+
+* Java 25
+* Git
+* Maven Wrapper
+
+A system-wide Maven installation is not required.
+
+## Clone
 
 ```bash
 git clone git@github.com:mfalme1k0/matibabu.git
 cd matibabu/backend
 ```
 
-Make the Maven wrapper executable if necessary:
+## Verify Java
 
 ```bash
-chmod +x mvnw
+java -version
 ```
 
-Run the test suite:
+## Run tests
 
 ```bash
 ./mvnw clean test
 ```
 
-Run the application:
+## Run the backend
 
 ```bash
 ./mvnw spring-boot:run
 ```
 
-The local SQLite database is created/used from the configured application datasource.
+The local backend uses SQLite for development.
 
 ---
 
-## Configuration
+# Documentation
 
-Environment-specific configuration should not be committed with credentials or other secrets.
-
-Local configuration can be supplied through Spring Boot's normal configuration mechanisms.
-
-The local development setup uses SQLite so that the backend can operate without requiring a separately managed database server.
-
----
-
-## Architectural Decisions
-
-Important architectural decisions are documented separately from the implementation.
-
-They are maintained under:
+Architectural decisions are maintained under:
 
 ```text
-docs/decisions/
+docs/
 ```
 
-The ADRs capture decisions that have architectural consequences rather than documenting every implementation detail.
-
-Current decisions cover areas including:
-
-* medicines and reference data
-* clinical domain boundaries
-* persistence
-* referrals
-* other architectural constraints introduced during development
-
-The intent is to keep the ADR collection focused rather than creating an ADR for every code-level decision.
-
----
-
-## Offline-First Direction
-
-Offline capability is not treated as an afterthought.
-
-The intended data flow is:
+Synchronization architecture is currently documented in:
 
 ```text
-             ┌─────────────────┐
-             │ Clinical Client │
-             └────────┬────────┘
-                      │
-                      ▼
-             ┌─────────────────┐
-             │ Local Database  │
-             │     SQLite      │
-             └────────┬────────┘
-                      │
-                 Synchronization
-                      │
-                      ▼
-             ┌─────────────────┐
-             │ Remote Backend  │
-             └────────┬────────┘
-                      │
-                 Integration
-                      │
-                      ▼
-             ┌─────────────────┐
-             │     DHIS2       │
-             └─────────────────┘
+docs/decisions/ADR-08-synchronization.md
 ```
 
-The synchronization layer is intentionally kept separate from the clinical domain.
-
-This means clinical operations should not need to know whether the system is currently connected to the network.
-
----
-
-## DHIS2 Integration
-
-DHIS2 integration is part of the longer-term interoperability direction of Matibabu.
-
-It is **not currently treated as a dependency of the core clinical domain**.
-
-The intended approach is to map Matibabu's internal clinical model to external interoperability requirements at an integration boundary.
-
-This avoids introducing DHIS2-specific identifiers and concepts directly into core domain objects unless they become genuine domain requirements.
-
----
-
-## Design Principles
-
-The project is guided by several principles:
-
-### Domain independence
-
-Clinical rules should not depend on Spring, JPA, SQLite, or external systems.
-
-### Explicit persistence
-
-Database schema changes should be versioned and reviewable.
-
-### Offline-first operation
-
-Clinical workflows should not assume continuous network availability.
-
-### Small aggregates
-
-Aggregates should protect meaningful invariants without becoming containers for unrelated functionality.
-
-### Explicit boundaries
-
-External systems such as DHIS2 should integrate through boundaries rather than leaking into the domain model.
-
-### Testable use cases
-
-Application services should be testable without requiring every test to boot the complete application.
-
-### Evolution over premature abstraction
-
-The architecture should provide clear extension points without introducing concepts before the domain requires them.
-
----
-
-## Development Workflow
-
-A typical feature should move through the following stages:
-
-```text
-Requirement
-    │
-    ▼
-Domain model / invariant
-    │
-    ▼
-Application use case
-    │
-    ▼
-Repository port
-    │
-    ▼
-Infrastructure adapter
-    │
-    ▼
-Database migration
-    │
-    ▼
-API
-    │
-    ▼
-Tests
-```
-
-Architecturally significant decisions should be captured in an ADR.
-
-Implementation details that do not have long-term architectural consequences should remain in the code and its tests rather than generating unnecessary documentation.
-
----
-
-## Current Development Priorities
-
-The current implementation is focused on establishing the clinical backend and its persistence boundaries.
-
-The broader roadmap includes:
-
-* completing the clinical workflows
-* strengthening offline-first behaviour
-* implementing local-to-remote synchronization
-* defining synchronization conflict handling
-* integrating with DHIS2
-* expanding interoperability around clinical data
-* continuing to harden security and automated testing
-
-These are intentionally separate concerns from the core clinical domain.
-
----
-
-## Contributing
-
-Development should preserve the architectural boundaries already established in the project.
-
-Before introducing a new feature:
-
-1. Identify the domain concept involved.
-2. Define its invariants.
-3. Keep framework-specific concerns outside the domain.
-4. Introduce repository ports where persistence is required.
-5. Implement infrastructure adapters separately.
-6. Add or update the database migration when the schema changes.
-7. Test domain rules independently.
-8. Add integration coverage where the feature crosses application boundaries.
-9. Add an ADR only when the decision has architectural significance.
+ADRs are reserved for decisions with meaningful long-term architectural consequences rather than every implementation detail.
 
 ---
 
 ## License
 
-See [LICENSE](LICENSE) for the project's license.
+See [`LICENSE`](LICENSE) for licensing information.
