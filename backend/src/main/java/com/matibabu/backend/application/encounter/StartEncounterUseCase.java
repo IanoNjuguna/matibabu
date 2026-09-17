@@ -10,6 +10,8 @@ public interface StartEncounterUseCase {
     Encounter start(
             UUID patientId,
             UUID attendingClinicianId,
+            UUID departmentId,
             Instant now
     );
 }
+

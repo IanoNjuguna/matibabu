@@ -1,5 +1,5 @@
 
-package com.matibabu.backend.infrastructure.persistence.encounter;
+        package com.matibabu.backend.infrastructure.persistence.encounter;
 
 import com.matibabu.backend.domain.encounter.Encounter;
 import com.matibabu.backend.domain.encounter.EncounterStatus;
@@ -26,6 +26,7 @@ class EncounterMapperTest {
         UUID patientId = UUID.randomUUID();
         UUID attendingClinicianId = UUID.randomUUID();
         UUID facilityId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
 
         Instant startedAt =
                 Instant.parse("2026-08-21T08:00:00Z");
@@ -36,6 +37,7 @@ class EncounterMapperTest {
                         patientId,
                         attendingClinicianId,
                         facilityId,
+                        departmentId,
                         startedAt
                 );
 
@@ -65,6 +67,11 @@ class EncounterMapperTest {
         );
 
         assertEquals(
+                encounter.getDepartmentId(),
+                entity.getDepartmentId()
+        );
+
+        assertEquals(
                 encounter.getStartedAt(),
                 entity.getStartedAt()
         );
@@ -91,6 +98,7 @@ class EncounterMapperTest {
         UUID patientId = UUID.randomUUID();
         UUID attendingClinicianId = UUID.randomUUID();
         UUID facilityId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
 
         Instant startedAt =
                 Instant.parse("2026-08-21T08:00:00Z");
@@ -106,6 +114,7 @@ class EncounterMapperTest {
         entity.setPatientId(patientId);
         entity.setAttendingClinicianId(attendingClinicianId);
         entity.setFacilityId(facilityId);
+        entity.setDepartmentId(departmentId);
         entity.setStartedAt(startedAt);
         entity.setStatus(EncounterStatus.DISCHARGED);
         entity.setEndedAt(endedAt);
@@ -133,6 +142,11 @@ class EncounterMapperTest {
         assertEquals(
                 facilityId,
                 encounter.getFacilityId()
+        );
+
+        assertEquals(
+                departmentId,
+                encounter.getDepartmentId()
         );
 
         assertEquals(

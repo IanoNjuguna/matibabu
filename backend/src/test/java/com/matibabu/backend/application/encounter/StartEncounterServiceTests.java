@@ -1,128 +1,211 @@
 package com.matibabu.backend.application.encounter;
 
 import com.matibabu.backend.config.NodeIdentity;
+import com.matibabu.backend.domain.department.Department;
+import com.matibabu.backend.domain.department.DepartmentRepository;
 import com.matibabu.backend.domain.encounter.Encounter;
 import com.matibabu.backend.domain.encounter.EncounterRepository;
 import com.matibabu.backend.domain.encounter.EncounterStatus;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
-class StartEncounterServiceTest {
+@ExtendWith(MockitoExtension.class)
+class StartEncounterServiceTests {
 
+    @Mock
+    private EncounterRepository encounterRepository;
 
-    /*
-     * Simple in-memory implementation of EncounterRepository.
-     *
-     * This allows us to test the application service without
-     * connecting to a database.
-     */
-    private static class InMemoryEncounterRepository
-            implements EncounterRepository {
+    @Mock
+    private DepartmentRepository departmentRepository;
 
-        private final Map<UUID, Encounter> encounters = new HashMap<>();
+    @Mock
+    private NodeIdentity nodeIdentity;
 
-        @Override
-        public Encounter save(Encounter encounter) {
-            encounters.put(encounter.getId(), encounter);
-            return encounter;
-        }
+    private StartEncounterService service;
 
-        @Override
-        public Optional<Encounter> findById(UUID id) {
-            return Optional.ofNullable(encounters.get(id));
-        }
+    @BeforeEach
+    void setUp() {
+        service = new StartEncounterService(
+                encounterRepository,
+                departmentRepository,
+                nodeIdentity
+        );
     }
 
-    /*
-     * Verifies that starting an encounter:
-     *
-     * 1. Creates an Encounter.
-     * 2. Generates an ID.
-     * 3. Associates it with the correct patient.
-     * 4. Associates it with the correct attending clinician.
-     * 5. Starts it as ACTIVE.
-     * 6. Preserves the supplied start time.
-     * 7. Saves it through the repository.
-     */
     @Test
     void shouldStartAndSaveEncounter() {
 
         UUID patientId = UUID.randomUUID();
         UUID attendingClinicianId = UUID.randomUUID();
         UUID facilityId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
 
         Instant startedAt =
                 Instant.parse("2026-08-20T10:00:00Z");
 
-        // Create the repository used by the application service.
-        InMemoryEncounterRepository repository =
-                new InMemoryEncounterRepository();
+        Department department =
+                Department.create(
+                        facilityId,
+                        "OPD",
+                        "Outpatient Department"
+                );
 
-        // Create the application service.
-        StartEncounterService service =
-                new StartEncounterService(repository, new NodeIdentity("facility", facilityId.toString()));
+        when(nodeIdentity.facilityId())
+                .thenReturn(facilityId);
 
-        // Execute the start encounter use case.
+        when(departmentRepository.findById(departmentId))
+                .thenReturn(Optional.of(department));
+
+        when(encounterRepository.save(any(Encounter.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
         Encounter encounter =
                 service.start(
                         patientId,
                         attendingClinicianId,
+                        departmentId,
                         startedAt
                 );
 
-        // The encounter should have a generated ID.
         assertNotNull(encounter.getId());
 
-        // The correct patient should be associated with the encounter.
         assertEquals(
                 patientId,
                 encounter.getPatientId()
         );
 
-        // The correct clinician should be associated with the encounter.
         assertEquals(
                 attendingClinicianId,
                 encounter.getAttendingClinicianId()
         );
 
-        // The configured facility should be associated with the encounter.
         assertEquals(
                 facilityId,
                 encounter.getFacilityId()
         );
 
-        // The encounter should start as ACTIVE.
         assertEquals(
-                EncounterStatus.ACTIVE,
-                encounter.getStatus()
+                departmentId,
+                encounter.getDepartmentId()
         );
 
-        // The supplied start time should be preserved.
         assertEquals(
                 startedAt,
                 encounter.getStartedAt()
         );
 
-        // An active encounter should not have an end time.
+        assertEquals(
+                EncounterStatus.ACTIVE,
+                encounter.getStatus()
+        );
+
         assertNull(encounter.getEndedAt());
 
-        // Verify that the service actually saved the encounter.
-        Encounter savedEncounter =
-                repository.findById(encounter.getId())
-                        .orElseThrow();
+        verify(departmentRepository)
+                .findById(departmentId);
 
-        assertEquals(
-                encounter.getId(),
-                savedEncounter.getId()
-        );
+        verify(encounterRepository)
+                .save(encounter);
     }
 
+    @Test
+    void shouldRejectDepartmentThatDoesNotExist() {
 
+        UUID patientId = UUID.randomUUID();
+        UUID attendingClinicianId = UUID.randomUUID();
+        UUID facilityId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+
+        Instant startedAt =
+                Instant.parse("2026-08-20T10:00:00Z");
+
+        when(nodeIdentity.facilityId())
+                .thenReturn(facilityId);
+
+        when(departmentRepository.findById(departmentId))
+                .thenReturn(Optional.empty());
+
+        IllegalArgumentException exception =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () -> service.start(
+                                patientId,
+                                attendingClinicianId,
+                                departmentId,
+                                startedAt
+                        )
+                );
+
+        assertEquals(
+                "Department not found: " + departmentId,
+                exception.getMessage()
+        );
+
+        verify(departmentRepository)
+                .findById(departmentId);
+
+        verify(encounterRepository, never())
+                .save(any());
+    }
+
+    @Test
+    void shouldRejectDepartmentFromAnotherFacility() {
+
+        UUID patientId = UUID.randomUUID();
+        UUID attendingClinicianId = UUID.randomUUID();
+
+        UUID currentFacilityId = UUID.randomUUID();
+        UUID departmentFacilityId = UUID.randomUUID();
+        UUID departmentId = UUID.randomUUID();
+
+        Instant startedAt =
+                Instant.parse("2026-08-20T10:00:00Z");
+
+        Department department =
+                Department.create(
+                        departmentFacilityId,
+                        "OPD",
+                        "Outpatient Department"
+                );
+
+        when(nodeIdentity.facilityId())
+                .thenReturn(currentFacilityId);
+
+        when(departmentRepository.findById(departmentId))
+                .thenReturn(Optional.of(department));
+
+        IllegalArgumentException exception =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () -> service.start(
+                                patientId,
+                                attendingClinicianId,
+                                departmentId,
+                                startedAt
+                        )
+                );
+
+        assertEquals(
+                "Department does not belong to the current facility",
+                exception.getMessage()
+        );
+
+        verify(departmentRepository)
+                .findById(departmentId);
+
+        verify(encounterRepository, never())
+                .save(any());
+    }
 }
+

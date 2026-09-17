@@ -2,7 +2,7 @@
 
 **Matibabu** is an offline-first Electronic Medical Records (EMR) platform designed for healthcare facilities operating in environments where network connectivity cannot be assumed.
 
-The system is being developed around a local-first clinical workflow: clinical data is persisted locally, clinical operations remain independent of continuous connectivity, and synchronization with a central system is being introduced as a separate architectural concern.
+The system is built around a local-first clinical workflow: clinical data is persisted locally, clinical operations remain independent of continuous connectivity, and synchronization with central systems is treated as a separate architectural concern.
 
 ---
 
@@ -10,11 +10,12 @@ The system is being developed around a local-first clinical workflow: clinical d
 
 Matibabu is under active development.
 
-The current backend includes working clinical and facility functionality, local persistence, authentication, database migrations, automated testing, and the initial architectural foundation for offline synchronization.
+The backend currently provides working clinical and facility functionality, local persistence, authentication and authorization, database migrations, automated testing, and the architectural foundation for offline synchronization.
+
+The facility model now supports **departmentalization**, allowing clinical encounters to be attributed to a specific department within a facility.
 
 Current development is moving toward:
 
-* Facility departmentalization
 * Facility and department-level reporting
 * Continued synchronization implementation
 * Remote data exchange
@@ -28,6 +29,10 @@ The backend currently contains functionality for:
 
 * Patient management
 * Clinical encounters
+* Encounter lifecycle management
+* Facility management
+* Department management
+* Facility and department association
 * Medical records
 * Clinical observations
 * Diagnoses
@@ -36,21 +41,20 @@ The backend currently contains functionality for:
 * Medicines
 * ATC mapping and review
 * Referrals
-* Facility management
 * Clinician authentication
 * Role-based security
 * CSRF protection
 * Local SQLite persistence
 * Flyway database migrations
 * Repository adapters
-* Automated tests
+* Automated testing
 * Initial offline synchronization architecture
 
 ---
 
 # Architecture
 
-The backend follows a domain-oriented architecture that separates business rules, application orchestration, infrastructure, and security concerns.
+The backend follows a domain-oriented architecture that separates business rules, application orchestration, infrastructure, security, and external-system concerns.
 
 ```text
                          API
@@ -73,7 +77,7 @@ The backend follows a domain-oriented architecture that separates business rules
                        SQLite
 ```
 
-The architectural goal is to keep clinical business rules independent of persistence technology, framework concerns, and external health-information systems.
+The architectural goal is to keep clinical and operational business rules independent of persistence technology, framework concerns, and external health-information systems.
 
 ---
 
@@ -107,6 +111,34 @@ Domain capabilities are organized around clinical and operational concepts rathe
 
 ---
 
+# Domain Model
+
+Matibabu models healthcare operations as separate domain concepts with explicit boundaries.
+
+The current organizational relationship is:
+
+```text
+                    Facility
+                       │
+             ┌─────────┴─────────┐
+             │                   │
+        Department A        Department B
+             │                   │
+             ▼                   ▼
+        Encounters           Encounters
+             │
+             ▼
+          Patients
+```
+
+A department belongs to exactly one facility.
+
+Clinical activity references the department responsible for the activity rather than making the department responsible for owning clinical records.
+
+This keeps organizational structure separate from clinical aggregates while still allowing clinical activity to be attributed to a facility and department.
+
+---
+
 # Clinical Domains
 
 ## Patients
@@ -127,7 +159,7 @@ The patient domain currently supports:
 
 Patient behaviour is represented in the domain model, while persistence is handled through repository interfaces and infrastructure adapters.
 
-Patient identity and timestamps are also part of the current synchronization design.
+Patient identity and timestamps also form part of the current synchronization design.
 
 ---
 
@@ -139,19 +171,60 @@ The current implementation supports:
 
 * Starting encounters
 * Recording the attending clinician
+* Recording the facility
+* Recording the department
 * Encounter status
 * Discharging encounters
 * Cancelling encounters
 * Retrieving encounters
 * Persistence through repository adapters
 
-Encounter lifecycle rules are handled by the domain model.
+An encounter currently records:
 
-The attending clinician is recorded explicitly on the encounter rather than inferred from the persistence layer.
+```text
+Encounter
+├── patientId
+├── attendingClinicianId
+├── facilityId
+├── departmentId
+├── startedAt
+├── status
+└── endedAt
+```
+
+The encounter lifecycle is governed by domain rules.
+
+For example:
+
+```text
+ACTIVE
+  │
+  ├── discharge() ──► DISCHARGED
+  │
+  └── cancel() ─────► CANCELLED
+```
+
+The attending clinician is recorded explicitly on the encounter rather than inferred from persistence or authentication state.
+
+The facility is obtained from the local node identity when an encounter is started. The requested department is validated against that facility before the encounter is created.
+
+This ensures that:
+
+```text
+Encounter.departmentId
+        │
+        ▼
+Department.facilityId
+        │
+        ▼
+Current NodeIdentity.facilityId
+```
+
+must represent the same facility boundary when creating a new encounter.
 
 ---
 
-## Medical Records
+# Medical Records
 
 The medical-record domain currently supports:
 
@@ -171,7 +244,7 @@ Treatment persistence is currently handled as part of the medical-record persist
 
 ---
 
-## Medicines
+# Medicines
 
 Matibabu contains a medicine domain and supporting persistence functionality.
 
@@ -189,7 +262,7 @@ The medicine catalogue is kept separate from patient clinical records.
 
 ---
 
-## Referrals
+# Referrals
 
 Referrals are represented as an independent domain concept with an explicit lifecycle.
 
@@ -215,9 +288,9 @@ Referral lifecycle transitions are handled through application services and doma
 
 # Facilities
 
-Facility management is already implemented.
+Facility management is implemented as a distinct domain.
 
-The current backend contains:
+The backend contains:
 
 ```text
 api/facility/
@@ -247,15 +320,54 @@ FacilityRepositoryAdapter
 SpringDataFacilitiesRepository
 ```
 
-Facility-related schema evolution is represented in the Flyway migration history, including:
+---
+
+# Departments
+
+Departments are modeled as a **first-class domain concept** rather than as a collection owned by the Facility aggregate.
+
+The department model includes:
+
+* Department identity
+* Facility ownership
+* Stable department code
+* Department name
+* Active/inactive state
+
+Conceptually:
 
 ```text
-V19__create_facilities_table.sql
-V20__restructure_referrals_table.sql
-V21__add_facility_id_and_identity_documents.sql
+Facility
+   │
+   ├── Department
+   │      ├── code
+   │      ├── name
+   │      └── active
+   │
+   └── Department
+          ├── code
+          ├── name
+          └── active
 ```
 
-Facility structure is the foundation for the next organizational modelling step: **departmentalization for reporting**.
+A department does not own collections of encounters, patients, or other clinical records.
+
+Instead, other domains reference the department through its identifier.
+
+This keeps departmentalization an organizational concern while allowing clinical data to be attributed to a department.
+
+### Facility boundary
+
+Department ownership is enforced at the application boundary.
+
+When an encounter is started:
+
+1. The current facility is obtained from `NodeIdentity`.
+2. The requested department is loaded.
+3. The department's `facilityId` is compared with the current facility.
+4. The encounter is created only when the department belongs to that facility.
+
+This prevents a local facility from creating clinical activity against a department belonging to another facility.
 
 ---
 
@@ -301,7 +413,7 @@ Offline-first operation is a core architectural requirement.
 
 The system assumes that a facility may need to continue clinical operations when a central service or network connection is unavailable.
 
-The local system therefore acts as the operational source for clinical activity:
+The local system therefore acts as the operational environment for clinical activity:
 
 ```text
 ┌───────────────────┐
@@ -341,19 +453,17 @@ This allows the clinical application to operate locally without requiring a cont
 
 ---
 
-# Initial Synchronization Strategy
+# Synchronization
 
-The synchronization architecture has already started to take shape.
+The synchronization architecture is being developed independently from the clinical domains.
 
-The backend contains a dedicated `NodeIdentity` configuration component, and the synchronization design is documented through:
+The backend contains a dedicated `NodeIdentity` component and synchronization-related architectural decisions are documented under:
 
 ```text
-docs/decisions/ADR-08-synchronization.md
+docs/decisions/
 ```
 
-The patient API and domain model also explicitly account for requirements established by the synchronization design.
-
-This establishes an important concept for an offline-first system:
+The current design establishes an important concept for an offline-first system:
 
 > A local installation is an identifiable node rather than an anonymous database replica.
 
@@ -374,15 +484,14 @@ Conceptually:
              Central System
 ```
 
-The synchronization strategy is intentionally being developed incrementally.
-
 ### Currently established
 
 * Node identity
+* Facility identity at the local node
 * Synchronization-aware patient identity
 * Synchronization-aware patient timestamps
 * Synchronization architectural documentation
-* Persistence decisions that account for re-synchronization
+* Persistence decisions that account for synchronization
 
 ### Not yet implemented as a complete synchronization subsystem
 
@@ -394,7 +503,7 @@ The synchronization strategy is intentionally being developed incrementally.
 * Retry/acknowledgement protocol
 * Complete remote synchronization workflow
 
-These remain part of the continuing synchronization work.
+Synchronization is therefore intentionally being developed incrementally rather than introducing a large synchronization abstraction before the protocol and consistency requirements are established.
 
 ---
 
@@ -442,7 +551,7 @@ Migrations are stored under:
 backend/src/main/resources/db/migration/
 ```
 
-The migration history covers the evolution of the system from the initial patient and encounter schema through:
+The migration history covers the evolution of the system through:
 
 * Patient details
 * Medical records
@@ -454,14 +563,12 @@ The migration history covers the evolution of the system from the initial patien
 * Facilities
 * Facility associations
 * Patient identity documents
+* Departments
+* Encounter department attribution
 
-The current migration sequence reaches:
+The facility and departmentalization changes are represented explicitly in the migration history rather than being applied through automatic schema generation.
 
-```text
-V21__add_facility_id_and_identity_documents.sql
-```
-
-Database changes are therefore explicit, versioned, and source controlled.
+Database changes are therefore versioned, reviewable, and source controlled.
 
 ---
 
@@ -477,20 +584,35 @@ StartEncounterUseCase
         ▼
 StartEncounterService
         │
-        ▼
-EncounterRepository
+        ├── DepartmentRepository
+        │
+        ├── NodeIdentity
+        │
+        └── EncounterRepository
 ```
 
-This pattern is used across the major application areas:
+The application service is responsible for coordinating the workflow:
 
-* Patients
-* Encounters
-* Facilities
-* Medical records
-* Medicines
-* Referrals
+```text
+Request
+   │
+   ▼
+Identify current facility
+   │
+   ▼
+Load department
+   │
+   ▼
+Validate department belongs to facility
+   │
+   ▼
+Create Encounter
+   │
+   ▼
+Persist Encounter
+```
 
-The application layer coordinates workflows without becoming the owner of domain rules.
+The application layer coordinates workflows without becoming the owner of core domain rules.
 
 ---
 
@@ -538,7 +660,7 @@ The application defines specific exceptions for cases including:
 * User not found
 * Existing clinician conflicts
 
-This keeps domain/application errors separate from HTTP response handling.
+Application and domain errors are translated into HTTP responses at the API boundary rather than coupling domain code directly to HTTP concerns.
 
 ---
 
@@ -554,7 +676,7 @@ Verify domain behaviour and business invariants independently of infrastructure.
 
 Verify application services and use-case orchestration.
 
-These tests may use lightweight in-memory repository implementations where appropriate.
+Lightweight in-memory repositories are used where they provide a clear isolation boundary. Mockito is used where mocking provides useful service-level isolation.
 
 ### Persistence tests
 
@@ -564,6 +686,8 @@ Verify:
 * Repository adapters
 * Database persistence
 * Domain/persistence mapping
+* Department persistence
+* Encounter facility and department attribution
 
 ### API and integration tests
 
@@ -575,16 +699,13 @@ Verify behaviour across application boundaries, including:
 * Error handling
 * Security integration
 
-### Testing tools
+### Current verification
 
-The project uses:
+The backend currently passes the full Maven test suite:
 
-* JUnit 5
-* Spring Boot testing support
-* Spring Data JPA testing support
-* Mockito where appropriate
-
-The testing strategy is deliberately mixed: some behaviour is tested with real implementations, some with lightweight in-memory implementations, and some dependencies are mocked when that provides an appropriate isolation boundary.
+```bash
+./mvnw clean test
+```
 
 ---
 
@@ -639,6 +760,8 @@ Tests
 
 Architecturally significant decisions are documented through ADRs.
 
+ADRs are reserved for decisions with meaningful long-term architectural consequences rather than every implementation detail.
+
 ---
 
 # Architectural Principles
@@ -666,6 +789,12 @@ Database changes are versioned through Flyway migrations.
 
 Clinical domains, application orchestration, persistence, security, and synchronization should remain independently understandable.
 
+## Organizational boundaries
+
+Facility and department relationships should be represented explicitly rather than inferred from clinical records.
+
+Clinical activity references organizational units through identifiers without making organizational aggregates responsible for owning clinical data.
+
 ## External systems at the boundary
 
 Remote systems and DHIS2-specific concerns should be isolated from the core clinical domain wherever practical.
@@ -690,6 +819,9 @@ Facility Model
 Departmentalization
        │
        ▼
+Facility / Department Attribution
+       │
+       ▼
 Facility / Department Reporting
        │
        ▼
@@ -704,11 +836,21 @@ DHIS2 Interoperability
 
 ### Current focus
 
-**Departmentalization of facilities for reporting.**
+**Facility and department-level reporting.**
 
-The facility model already exists. The next modelling step is to determine how departments belong to facilities and how clinical activity should be attributed to those departments for reporting.
+The organizational model now establishes:
 
-The departmental model should be established before reporting queries and aggregation logic are implemented.
+```text
+Facility
+   │
+   └── Department
+          │
+          └── Encounter
+```
+
+New encounters are associated with a department belonging to the current facility.
+
+The next step is to build reporting and aggregation capabilities on top of this established organizational model.
 
 ---
 
@@ -721,9 +863,10 @@ The departmental model should be established before reporting queries and aggreg
 
 ### Facility Management
 
-* Departmentalize facilities
-* Establish department-level clinical attribution
-* Introduce facility and department reporting
+* Build facility-level reporting
+* Build department-level reporting
+* Establish reporting queries and aggregation boundaries
+* Continue refining facility and department administration
 
 ### Synchronization
 
@@ -789,16 +932,17 @@ Architectural decisions are maintained under:
 docs/
 ```
 
-Synchronization architecture is currently documented in:
+Synchronization architecture and other significant architectural decisions are documented as ADRs.
 
-```text
-docs/decisions/ADR-08-synchronization.md
-```
-
-ADRs are reserved for decisions with meaningful long-term architectural consequences rather than every implementation detail.
+ADRs are intentionally reserved for decisions with meaningful long-term architectural consequences rather than every implementation detail.
 
 ---
 
 ## License
 
 See [`LICENSE`](LICENSE) for licensing information.
+
+```
+
+This version makes one important change in the project's story: **departmentalization is no longer a roadmap item—it is an implemented architectural capability.** Reporting is now the next layer built on top of it.
+```

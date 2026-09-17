@@ -49,8 +49,9 @@ class CancelEncounterServiceTest {
      */
     @Test
     void shouldCancelExistingEncounter() {
-
         UUID patientId = UUID.randomUUID();
+
+        UUID departmentId = UUID.randomUUID();
 
         UUID attendingClinicianId =
                 UUID.randomUUID();
@@ -67,9 +68,15 @@ class CancelEncounterServiceTest {
         InMemoryEncounterRepository repository =
                 new InMemoryEncounterRepository();
 
-        // Create an active encounter.
+// Create an active encounter.
         Encounter encounter =
-                Encounter.start(patientId, attendingClinicianId, facilityId, startedAt);
+                Encounter.start(
+                        patientId,
+                        attendingClinicianId,
+                        facilityId,
+                        departmentId,
+                        startedAt
+                );
 
         // Persist it before executing the use case.
         repository.save(encounter);

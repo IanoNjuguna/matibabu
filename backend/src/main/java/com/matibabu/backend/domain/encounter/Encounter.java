@@ -12,15 +12,9 @@ public class Encounter {
     private final UUID patientId;
     private final Instant startedAt;
 
-    // The clinician who attended/performed this encounter.
-    // Nullable only for encounters recorded before this field existed
-    // (see reconstitute); every newly started encounter requires one.
     private UUID attendingClinicianId;
-
-    // The facility that recorded this encounter.
-    // Nullable only for encounters recorded before this field existed
-    // (see reconstitute); every newly started encounter requires one.
     private UUID facilityId;
+    private UUID departmentId;
 
     private EncounterStatus status;
     private Instant endedAt;
@@ -29,35 +23,50 @@ public class Encounter {
             UUID id,
             UUID patientId,
             Instant startedAt
-
     ) {
         this.id = Objects.requireNonNull(id, "Encounter ID cannot be null");
         this.patientId = Objects.requireNonNull(patientId, "Patient ID cannot be null");
         this.startedAt = Objects.requireNonNull(startedAt, "Start time cannot be null");
 
-
         this.status = EncounterStatus.ACTIVE;
         this.endedAt = null;
     }
-    //start an encounter
-    public static Encounter start(UUID patientId, UUID attendingClinicianId, UUID facilityId, Instant now) {
+
+    // Start a new encounter
+    public static Encounter start(
+            UUID patientId,
+            UUID attendingClinicianId,
+            UUID facilityId,
+            UUID departmentId,
+            Instant now
+    ) {
         UUID encounterId = UuidCreator.getTimeOrderedEpoch();
+
         Encounter encounter = new Encounter(
                 encounterId,
                 patientId,
                 now
         );
+
         encounter.attendingClinicianId = Objects.requireNonNull(
                 attendingClinicianId,
                 "An encounter must record which clinician is attending"
         );
+
         encounter.facilityId = Objects.requireNonNull(
                 facilityId,
                 "An encounter must record which facility it belongs to"
         );
+
+        encounter.departmentId = Objects.requireNonNull(
+                departmentId,
+                "An encounter must record which department it belongs to"
+        );
+
         return encounter;
     }
-    //discharge an encounter
+
+    // Discharge an encounter
     public void discharge(Instant now) {
         ensureActive();
 
@@ -72,8 +81,9 @@ public class Encounter {
         this.status = EncounterStatus.DISCHARGED;
         this.endedAt = now;
     }
-    //cancel an encounter
-    //TODO handle cancellation constraints
+
+    // Cancel an encounter
+    // TODO handle cancellation constraints
     public void cancel(Instant now) {
         ensureActive();
 
@@ -88,7 +98,8 @@ public class Encounter {
         this.status = EncounterStatus.CANCELLED;
         this.endedAt = now;
     }
-    //check if a discharge is active
+
+    // Check if an encounter is active
     private void ensureActive() {
         if (status != EncounterStatus.ACTIVE) {
             throw new EncounterNotActiveException(
@@ -96,7 +107,8 @@ public class Encounter {
             );
         }
     }
-    //getters
+
+    // Getters
     public UUID getId() {
         return id;
     }
@@ -113,6 +125,10 @@ public class Encounter {
         return facilityId;
     }
 
+    public UUID getDepartmentId() {
+        return departmentId;
+    }
+
     public EncounterStatus getStatus() {
         return status;
     }
@@ -124,23 +140,31 @@ public class Encounter {
     public Instant getEndedAt() {
         return endedAt;
     }
-    //if an encounter exists, reconstitute using existing data
+
+    // Reconstitute an encounter from persistence
     public static Encounter reconstitute(
             UUID id,
             UUID patientId,
             UUID attendingClinicianId,
             UUID facilityId,
+            UUID departmentId,
             Instant startedAt,
             EncounterStatus status,
             Instant endedAt
     ) {
-        Encounter encounter = new Encounter(id, patientId, startedAt);
+        Encounter encounter = new Encounter(
+                id,
+                patientId,
+                startedAt
+        );
+
         encounter.attendingClinicianId = attendingClinicianId;
         encounter.facilityId = facilityId;
+        encounter.departmentId = departmentId;
         encounter.status = status;
         encounter.endedAt = endedAt;
+
         return encounter;
     }
-
-
 }
+

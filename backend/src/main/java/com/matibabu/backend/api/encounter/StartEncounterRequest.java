@@ -7,7 +7,10 @@ import java.util.UUID;
 public record StartEncounterRequest(
 
         @NotNull
-        UUID patientId
+        UUID patientId,
+
+        @NotNull
+        UUID departmentId
 
 ) {
 }

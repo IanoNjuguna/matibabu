@@ -18,9 +18,11 @@ public interface EncounterMapper {
                 entity.getPatientId(),
                 entity.getAttendingClinicianId(),
                 entity.getFacilityId(),
+                entity.getDepartmentId(),
                 entity.getStartedAt(),
                 entity.getStatus(),
                 entity.getEndedAt()
         );
     }
 }
+

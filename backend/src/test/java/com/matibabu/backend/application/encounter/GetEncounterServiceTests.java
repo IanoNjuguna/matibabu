@@ -29,7 +29,10 @@ class GetEncounterServiceTests {
     @Test
     void shouldReturnEncounterWhenFound() {
 
+
         UUID patientId = UUID.randomUUID();
+
+        UUID departmentId = UUID.randomUUID();
 
         UUID attendingClinicianId =
                 UUID.randomUUID();
@@ -38,12 +41,19 @@ class GetEncounterServiceTests {
                 UUID.randomUUID();
 
         Instant startedAt =
-                Instant.parse("2026-08-21T08:00:00Z");
+                Instant.parse("2026-08-20T10:00:00Z");
 
-        // Create an Encounter that will be returned by the fake repository.
+
+
+// Create an active encounter.
         Encounter encounter =
-                Encounter.start(patientId, attendingClinicianId, facilityId, startedAt);
-
+                Encounter.start(
+                        patientId,
+                        attendingClinicianId,
+                        facilityId,
+                        departmentId,
+                        startedAt
+                );
         /*
          * Use a simple fake repository
          * The fake repository will return the encounter created above

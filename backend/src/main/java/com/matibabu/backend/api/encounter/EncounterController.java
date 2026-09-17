@@ -5,6 +5,7 @@ import com.matibabu.backend.application.encounter.DischargeEncounterUseCase;
 import com.matibabu.backend.application.encounter.GetEncounterUseCase;
 import com.matibabu.backend.application.encounter.StartEncounterUseCase;
 import com.matibabu.backend.security.CustomUserDetails;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -40,17 +41,17 @@ public class EncounterController {
         );
     }
 
-
-    @PostMapping("/{patientId}")
+    @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public EncounterResponse start(
-            @PathVariable UUID patientId,
+            @Valid @RequestBody StartEncounterRequest request,
             @AuthenticationPrincipal CustomUserDetails principal
     ) {
         return EncounterResponse.from(
                 startEncounterUseCase.start(
-                        patientId,
+                        request.patientId(),
                         principal.getClinician().getId(),
+                        request.departmentId(),
                         Instant.now()
                 )
         );
@@ -82,3 +83,4 @@ public class EncounterController {
         );
     }
 }
+
